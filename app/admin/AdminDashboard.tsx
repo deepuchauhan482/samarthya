@@ -1,0 +1,64 @@
+"use client";
+
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { ArrowLeft, Building2, Check, Clock3, Download, GraduationCap, HandHeart, Loader2, MapPin, MessageSquarePlus, RefreshCw, ShieldCheck, Users, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+type AdminChallenge = { id: number; reference: string; title: string; description: string; location: string; category: string; status: "pending" | "approved" | "rejected"; supportCount: number; createdAt: string };
+type Proposal = { id:number; challengeId:number; teamName:string; institution:string; summary:string; approach:string; memberCount:number; status:"pending"|"approved"|"rejected" };
+type Offer = { id:number; challengeId:number; organization:string; supportType:string; message:string; status:"pending"|"approved"|"rejected" };
+
+export default function AdminDashboard({ email }: { email: string }) {
+  const [challenges, setChallenges] = useState<AdminChallenge[]>([]);
+  const [filter, setFilter] = useState<"all" | AdminChallenge["status"]>("pending");
+  const [loading, setLoading] = useState(true);
+  const [reviewing, setReviewing] = useState<number | null>(null);
+  const [error, setError] = useState("");
+  const [solutions,setSolutions]=useState<Proposal[]>([]),[offers,setOffers]=useState<Offer[]>([]);
+  const [updateChallenge,setUpdateChallenge]=useState(""),[updateTitle,setUpdateTitle]=useState(""),[updateContent,setUpdateContent]=useState(""),[updateStage,setUpdateStage]=useState("Field update"),[posting,setPosting]=useState(false);
+  async function load() {
+    setLoading(true); setError("");
+    try {
+      const response = await fetch("/api/admin/challenges", { cache: "no-store" });
+      const data = await response.json() as { challenges?: AdminChallenge[]; solutions?:Proposal[]; offers?:Offer[]; error?: string };
+      if (!response.ok) throw new Error(data.error ?? "Could not load reports.");
+      setChallenges(data.challenges ?? []);
+      setSolutions(data.solutions??[]);setOffers(data.offers??[]);
+    } catch (err) { setError(err instanceof Error ? err.message : "Could not load reports."); }
+    finally { setLoading(false); }
+  }
+  async function reviewCollab(entity:"solution"|"offer",id:number,status:"approved"|"rejected"){
+    setReviewing(id);setError("");try{const response=await fetch("/api/admin/challenges",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({entity,id,status})});const data=await response.json() as{item?:Proposal|Offer;error?:string};if(!response.ok)throw new Error(data.error??"Review failed.");if(entity==="solution")setSolutions(current=>current.map(item=>item.id===id?data.item as Proposal:item));else setOffers(current=>current.map(item=>item.id===id?data.item as Offer:item))}catch(err){setError(err instanceof Error?err.message:"Review failed.")}finally{setReviewing(null)}}
+  async function postUpdate(event:FormEvent){event.preventDefault();setPosting(true);setError("");try{const response=await fetch("/api/admin/challenges",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({challengeId:Number(updateChallenge),title:updateTitle,content:updateContent,stage:updateStage})});const data=await response.json() as{error?:string};if(!response.ok)throw new Error(data.error??"Update failed.");setUpdateTitle("");setUpdateContent("")}catch(err){setError(err instanceof Error?err.message:"Update failed.")}finally{setPosting(false)}}
+  useEffect(() => { void load(); }, []);
+  async function review(id: number, status: "approved" | "rejected") {
+    setReviewing(id); setError("");
+    try {
+      const response = await fetch("/api/admin/challenges", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, status }) });
+      const data = await response.json() as { challenge?: AdminChallenge; error?: string };
+      if (!response.ok) throw new Error(data.error ?? "Review failed.");
+      if (data.challenge) setChallenges((current) => current.map((item) => item.id === id ? data.challenge! : item));
+    } catch (err) { setError(err instanceof Error ? err.message : "Review failed."); }
+    finally { setReviewing(null); }
+  }
+  const counts = { pending: challenges.filter((c) => c.status === "pending").length, approved: challenges.filter((c) => c.status === "approved").length, rejected: challenges.filter((c) => c.status === "rejected").length };
+  const shown = useMemo(() => filter === "all" ? challenges : challenges.filter((item) => item.status === filter), [filter, challenges]);
+  const pendingCollaboration=solutions.filter(item=>item.status==="pending").length+offers.filter(item=>item.status==="pending").length;
+  const totalSupport=challenges.reduce((sum,item)=>sum+item.supportCount,0);
+  function downloadReport(){const escape=(value:unknown)=>`"${String(value??"").replaceAll('"','""')}"`;const rows=[["Reference","Title","Location","Category","Status","Supporters","Teams","Created"],...challenges.map(item=>[item.reference,item.title,item.location,item.category,item.status,item.supportCount,(item as AdminChallenge&{teams?:number}).teams??0,item.createdAt])];const blob=new Blob([rows.map(row=>row.map(escape).join(",")).join("\n")],{type:"text/csv;charset=utf-8"});const url=URL.createObjectURL(blob);const link=document.createElement("a");link.href=url;link.download=`samarthya-report-${new Date().toISOString().slice(0,10)}.csv`;link.click();URL.revokeObjectURL(url)}
+  return <main className="admin-page">
+    <header className="admin-header"><div className="admin-shell"><a href="/" className="admin-back"><ArrowLeft /> Samarthya</a><div><ShieldCheck /><span>Verified admin</span><small>{email}</small></div></div></header>
+    <div className="admin-shell admin-content"><div className="admin-title"><div><span>REVIEW CENTRE</span><h1>Community challenge reports</h1><p>Approve genuine problems before they become visible on the public platform.</p></div><div className="admin-title-actions"><Button variant="outline" onClick={downloadReport} disabled={!challenges.length}><Download/>Export CSV</Button><Button variant="outline" onClick={load} disabled={loading}><RefreshCw className={loading ? "spin" : ""} /> Refresh</Button></div></div>
+      <div className="admin-overview"><article><ShieldCheck/><span><strong>{counts.approved}</strong>Public challenges</span></article><article><Clock3/><span><strong>{counts.pending}</strong>Reports waiting</span></article><article><Users/><span><strong>{pendingCollaboration}</strong>Collaboration reviews</span></article><article><HandHeart/><span><strong>{totalSupport}</strong>Recorded supports</span></article></div>
+      <div className="admin-stats"><button className={filter === "pending" ? "active" : ""} onClick={() => setFilter("pending")}><Clock3 /><span><strong>{counts.pending}</strong>Pending review</span></button><button className={filter === "approved" ? "active" : ""} onClick={() => setFilter("approved")}><Check /><span><strong>{counts.approved}</strong>Approved</span></button><button className={filter === "rejected" ? "active" : ""} onClick={() => setFilter("rejected")}><X /><span><strong>{counts.rejected}</strong>Rejected</span></button><button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}><HandHeart /><span><strong>{challenges.length}</strong>All reports</span></button></div>
+      {error && <div className="admin-error">{error}</div>}
+      <div className="admin-table-wrap"><Table><TableHeader><TableRow><TableHead>Report</TableHead><TableHead>Location</TableHead><TableHead>Category</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Review</TableHead></TableRow></TableHeader><TableBody>{loading ? <TableRow><TableCell colSpan={5}><div className="admin-empty"><Loader2 className="spin" /> Loading reports…</div></TableCell></TableRow> : shown.length === 0 ? <TableRow><TableCell colSpan={5}><div className="admin-empty"><ShieldCheck /><strong>Nothing waiting here</strong><span>New citizen reports will appear automatically.</span></div></TableCell></TableRow> : shown.map((challenge) => <TableRow key={challenge.id}><TableCell><div className="report-cell"><small>{challenge.reference} · {new Date(challenge.createdAt).toLocaleDateString()}</small><strong>{challenge.title}</strong><p>{challenge.description}</p></div></TableCell><TableCell><span className="table-location"><MapPin />{challenge.location}</span></TableCell><TableCell>{challenge.category}</TableCell><TableCell><span className={`status status-${challenge.status}`}>{challenge.status}</span></TableCell><TableCell><div className="review-actions">{challenge.status !== "approved" && <Button size="sm" disabled={reviewing === challenge.id} onClick={() => review(challenge.id, "approved")}><Check /> Approve</Button>}{challenge.status !== "rejected" && <Button size="sm" variant="outline" disabled={reviewing === challenge.id} onClick={() => review(challenge.id, "rejected")}><X /> Reject</Button>}</div></TableCell></TableRow>)}</TableBody></Table></div>
+      <section className="admin-collab-section"><div className="admin-section-title"><div><GraduationCap/><span><strong>Student proposals</strong><small>{solutions.filter(s=>s.status==="pending").length} waiting</small></span></div></div><div className="moderation-grid">{solutions.length?solutions.map(item=><article key={item.id}><div className="moderation-top"><span className={`status status-${item.status}`}>{item.status}</span><small>Challenge #{item.challengeId}</small></div><h3>{item.teamName}</h3><strong>{item.institution} · {item.memberCount} members</strong><p>{item.summary}</p><details><summary>Read approach</summary><p>{item.approach}</p></details><div className="review-actions">{item.status!=="approved"&&<Button size="sm" onClick={()=>reviewCollab("solution",item.id,"approved")}><Check/>Approve</Button>}{item.status!=="rejected"&&<Button size="sm" variant="outline" onClick={()=>reviewCollab("solution",item.id,"rejected")}><X/>Reject</Button>}</div></article>):<div className="admin-mini-empty">No proposals submitted yet.</div>}</div></section>
+      <section className="admin-collab-section"><div className="admin-section-title"><div><Building2/><span><strong>Industry offers</strong><small>{offers.filter(o=>o.status==="pending").length} waiting</small></span></div></div><div className="moderation-grid">{offers.length?offers.map(item=><article key={item.id}><div className="moderation-top"><span className={`status status-${item.status}`}>{item.status}</span><small>Challenge #{item.challengeId}</small></div><h3>{item.organization}</h3><strong>{item.supportType}</strong><p>{item.message}</p><div className="review-actions">{item.status!=="approved"&&<Button size="sm" onClick={()=>reviewCollab("offer",item.id,"approved")}><Check/>Approve</Button>}{item.status!=="rejected"&&<Button size="sm" variant="outline" onClick={()=>reviewCollab("offer",item.id,"rejected")}><X/>Reject</Button>}</div></article>):<div className="admin-mini-empty">No offers submitted yet.</div>}</div></section>
+      <section className="admin-update-section"><div className="admin-section-title"><div><MessageSquarePlus/><span><strong>Post a progress update</strong><small>Visible immediately on the challenge timeline</small></span></div></div><form onSubmit={postUpdate}><div className="form-row"><label>Approved challenge<Select value={updateChallenge} onValueChange={setUpdateChallenge} required><SelectTrigger className="w-full"><SelectValue placeholder="Choose challenge"/></SelectTrigger><SelectContent>{challenges.filter(c=>c.status==="approved").map(c=><SelectItem key={c.id} value={String(c.id)}>{c.reference} · {c.title.slice(0,35)}</SelectItem>)}</SelectContent></Select></label><label>Stage<Input value={updateStage} maxLength={40} onChange={e=>setUpdateStage(e.target.value)}/></label></div><label>Update title<Input required minLength={3} maxLength={100} value={updateTitle} onChange={e=>setUpdateTitle(e.target.value)}/></label><label>What changed?<textarea required minLength={10} maxLength={1000} value={updateContent} onChange={e=>setUpdateContent(e.target.value)}/></label><Button disabled={posting||!updateChallenge}>{posting?<Loader2 className="spin"/>:<MessageSquarePlus/>}{posting?"Posting…":"Post update"}</Button></form></section>
+    </div>
+  </main>;
+}
