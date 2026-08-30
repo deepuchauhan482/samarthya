@@ -73,7 +73,7 @@ export default function Home() {
     <header className="site-header"><div className="shell header-inner">
       <a className="brand" href="/" aria-label="Samarthya home"><span className="brand-mark"><HandHeart /></span><span><strong>समर्थ्य</strong><small>Samarthya</small></span></a>
       <nav className={menuOpen ? "nav-links open" : "nav-links"} aria-label="Main navigation"><a href="#challenges">{hindi?"चुनौतियाँ":"Challenges"}</a><a href="#how">{hindi?"कैसे काम करता है":"How it works"}</a><a href="/track">{hindi?"मेरी गतिविधि":"My activity"}</a><a href="/help">{hindi?"सहायता":"Help"}</a><button className="language" onClick={() => setHindi(!hindi)} aria-pressed={hindi}><Languages /> {hindi ? "English" : "हिंदी"}</button></nav>
-      <div className="header-actions"><Button asChild variant="ghost" className="login-button"><a href="/admin">Admin</a></Button><Button className="report-top" onClick={() => setDialogOpen(true)}><Plus /> Report a problem</Button><button className="menu-button" onClick={() => setMenuOpen(!menuOpen)} aria-label="Toggle menu" aria-expanded={menuOpen}>{menuOpen ? <X /> : <Menu />}</button></div>
+      <div className="header-actions"><Button asChild variant="ghost" className="login-button"><a href="/account"><Users/> Sign in</a></Button><Button className="report-top" onClick={() => setDialogOpen(true)}><Plus /> Report a problem</Button><button className="menu-button" onClick={() => setMenuOpen(!menuOpen)} aria-label="Toggle menu" aria-expanded={menuOpen}>{menuOpen ? <X /> : <Menu />}</button></div>
     </div></header>
 
     <section id="main-content" className="hero"><div className="shell hero-grid">

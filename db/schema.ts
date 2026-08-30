@@ -1,4 +1,23 @@
-import { index, integer, pgTable, serial, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { boolean, index, integer, pgTable, serial, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+
+export const users = pgTable("users", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  email: text("email").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  role: text("role", { enum: ["student", "university", "industry"] }).notNull(),
+  organization: text("organization").notNull(),
+  isVerified: boolean("is_verified").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull().defaultNow(),
+}, (table) => [index("users_role_verified_idx").on(table.role, table.isVerified)]);
+
+export const userSessions = pgTable("user_sessions", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull().unique(),
+  expiresAt: timestamp("expires_at", { withTimezone: true, mode: "string" }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull().defaultNow(),
+}, (table) => [index("sessions_user_expiry_idx").on(table.userId, table.expiresAt)]);
 
 export const challenges = pgTable("challenges", {
   id: serial("id").primaryKey(),
@@ -41,6 +60,7 @@ export const solutionProposals = pgTable("solution_proposals", {
   approach: text("approach").notNull(),
   memberCount: integer("member_count").notNull().default(1),
   submitterKey: text("submitter_key").notNull(),
+  userId: integer("user_id").references(() => users.id, { onDelete: "set null" }),
   status: text("status", { enum: ["pending", "approved", "rejected"] }).notNull().default("pending"),
   createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull().defaultNow(),
   reviewedAt: timestamp("reviewed_at", { withTimezone: true, mode: "string" }),
@@ -53,6 +73,7 @@ export const industryOffers = pgTable("industry_offers", {
   supportType: text("support_type").notNull(),
   message: text("message").notNull(),
   submitterKey: text("submitter_key").notNull(),
+  userId: integer("user_id").references(() => users.id, { onDelete: "set null" }),
   status: text("status", { enum: ["pending", "approved", "rejected"] }).notNull().default("pending"),
   createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull().defaultNow(),
   reviewedAt: timestamp("reviewed_at", { withTimezone: true, mode: "string" }),
@@ -66,3 +87,12 @@ export const challengeUpdates = pgTable("challenge_updates", {
   stage: text("stage").notNull().default("Update"),
   createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull().defaultNow(),
 }, (table) => [index("updates_challenge_created_idx").on(table.challengeId, table.createdAt)]);
+
+export const mentorships = pgTable("mentorships", {
+  id: serial("id").primaryKey(),
+  challengeId: integer("challenge_id").notNull().references(() => challenges.id, { onDelete: "cascade" }),
+  universityUserId: integer("university_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  mentorName: text("mentor_name").notNull(),
+  note: text("note").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull().defaultNow(),
+}, (table) => [uniqueIndex("mentorship_challenge_university_idx").on(table.challengeId, table.universityUserId)]);

@@ -1,24 +1,32 @@
 import { desc, eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { challengeUpdates, challenges, industryOffers, solutionProposals } from "@/db/schema";
+import { challengeUpdates, challenges, industryOffers, solutionProposals, users } from "@/db/schema";
 import { isAdminRequest } from "@/app/admin-auth";
 
 export async function GET(request: Request) {
   if (!(await isAdminRequest(request))) return Response.json({ error: "Admin access required." }, { status: 403 });
   const db = getDb();
-  const [rows, solutions, offers] = await Promise.all([
+  const [rows, solutions, offers, accounts] = await Promise.all([
     db.select({ id:challenges.id, reference:challenges.reference, title:challenges.title, description:challenges.description, location:challenges.location, category:challenges.category, status:challenges.status, supportCount:challenges.supportCount, teams:challenges.teams, hasPhoto:sql<boolean>`${challenges.photoData} is not null`, createdAt:challenges.createdAt, reviewedAt:challenges.reviewedAt }).from(challenges).orderBy(desc(challenges.createdAt)).limit(100),
     db.select({ id:solutionProposals.id, challengeId:solutionProposals.challengeId, teamName:solutionProposals.teamName, institution:solutionProposals.institution, summary:solutionProposals.summary, approach:solutionProposals.approach, memberCount:solutionProposals.memberCount, status:solutionProposals.status, createdAt:solutionProposals.createdAt, reviewedAt:solutionProposals.reviewedAt }).from(solutionProposals).orderBy(desc(solutionProposals.createdAt)).limit(100),
     db.select({ id:industryOffers.id, challengeId:industryOffers.challengeId, organization:industryOffers.organization, supportType:industryOffers.supportType, message:industryOffers.message, status:industryOffers.status, createdAt:industryOffers.createdAt, reviewedAt:industryOffers.reviewedAt }).from(industryOffers).orderBy(desc(industryOffers.createdAt)).limit(100),
+    db.select({ id:users.id, name:users.name, email:users.email, role:users.role, organization:users.organization, isVerified:users.isVerified, createdAt:users.createdAt }).from(users).orderBy(desc(users.createdAt)).limit(100),
   ]);
-  return Response.json({ challenges: rows, solutions, offers });
+  return Response.json({ challenges: rows, solutions, offers, users: accounts });
 }
 
 export async function PATCH(request: Request) {
   if (!(await isAdminRequest(request))) return Response.json({ error: "Admin access required." }, { status: 403 });
-  const payload = await request.json() as { id?: number; status?: "approved" | "rejected"; entity?: "challenge" | "solution" | "offer" };
-  if (!Number.isInteger(payload.id) || !payload.status || !["approved", "rejected"].includes(payload.status)) return Response.json({ error: "Invalid review action." }, { status: 400 });
+  const payload = await request.json() as { id?: number; status?: "approved" | "rejected"; entity?: "challenge" | "solution" | "offer" | "user"; verified?: boolean };
+  if (!Number.isInteger(payload.id)) return Response.json({ error: "Invalid review action." }, { status: 400 });
   const db = getDb();
+  if (payload.entity === "user") {
+    if (typeof payload.verified !== "boolean") return Response.json({ error: "Invalid verification action." }, { status: 400 });
+    const [updated] = await db.update(users).set({ isVerified: payload.verified }).where(eq(users.id, payload.id!)).returning({ id:users.id, name:users.name, email:users.email, role:users.role, organization:users.organization, isVerified:users.isVerified, createdAt:users.createdAt });
+    if (!updated) return Response.json({ error: "Account not found." }, { status: 404 });
+    return Response.json({ entity: "user", item: updated });
+  }
+  if (!payload.status || !["approved", "rejected"].includes(payload.status)) return Response.json({ error: "Invalid review action." }, { status: 400 });
   if (payload.entity === "solution") {
     const [before] = await db.select().from(solutionProposals).where(eq(solutionProposals.id, payload.id!));
     if (!before) return Response.json({ error: "Proposal not found." }, { status: 404 });
